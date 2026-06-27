@@ -513,6 +513,22 @@ let animFrameRec = null;
 
 const $ = id => document.getElementById(id);
 
+function getSupportedMimeType() {
+  const candidates = [
+    'audio/mp4',
+    'audio/webm;codecs=opus',
+    'audio/webm',
+    'audio/ogg;codecs=opus',
+    'audio/aac'
+  ];
+  if (window.MediaRecorder && MediaRecorder.isTypeSupported) {
+    for (const type of candidates) {
+      if (MediaRecorder.isTypeSupported(type)) return type;
+    }
+  }
+  return ''; // let the browser pick its own default as a last resort
+}
+
 function formatTime(s) {
   return Math.floor(s/60) + ':' + String(Math.floor(s%60)).padStart(2,'0');
 }
@@ -612,6 +628,9 @@ $('fileInput').addEventListener('change', async function(e) {
 function toggleOrig() {
   if (!origAudio) return;
   if (origAudio.paused) {
+    if (origAudio.ended || origAudio.currentTime >= (origAudio.duration || Infinity)) {
+      origAudio.currentTime = 0;
+    }
     origAudio.play();
     $('origPlayBtn').innerHTML = '<i class="ti ti-player-pause" aria-hidden="true"></i> Pause';
     $('miniOrigIcon').className = 'ti ti-player-pause';
@@ -637,7 +656,8 @@ async function toggleRecord() {
     setStatus($('recStatus'), '● Recording now…', 'active');
     $('recPlaceholder').style.display = 'none';
     $('recWave').style.display = 'block';
-    mediaRec = new MediaRecorder(stream);
+    const mimeType = getSupportedMimeType();
+    mediaRec = new MediaRecorder(stream, mimeType ? {mimeType} : undefined);
     const frameObj = {};
     if (window.AudioContext||window.webkitAudioContext) {
       recAudioCtx = new (window.AudioContext||window.webkitAudioContext)();
@@ -658,7 +678,7 @@ async function toggleRecord() {
       $('recBtn').innerHTML = '<i class="ti ti-microphone" aria-hidden="true"></i> <span id="recBtnLabel">Record Again</span>';
       $('recBtn').className = 'btn btn-coral';
       setStatus($('recStatus'), '✓ Recording saved!', 'done');
-      const blob = new Blob(recChunks, {type:'audio/webm'});
+      const blob = new Blob(recChunks, {type: mediaRec.mimeType || 'audio/webm'});
       const url = URL.createObjectURL(blob);
       recAudio = new Audio(url);
       recAudio.addEventListener('ended', () => {
@@ -699,6 +719,9 @@ async function toggleRecord() {
 function toggleRec() {
   if (!recAudio) return;
   if (recAudio.paused) {
+    if (recAudio.ended || recAudio.currentTime >= (recAudio.duration || Infinity)) {
+      recAudio.currentTime = 0;
+    }
     recAudio.play();
     $('recPlayBtn').innerHTML = '<i class="ti ti-player-pause" aria-hidden="true"></i> Pause';
     $('miniRecIcon').className = 'ti ti-player-pause';
@@ -737,6 +760,7 @@ function checkCompare() {
 
 function playBoth() {
   if (!origAudio || !recAudio) return;
+  origAudio.pause();
   origAudio.currentTime = 0;
   origAudio.play();
   $('origPlayBtn').innerHTML = '<i class="ti ti-player-pause" aria-hidden="true"></i> Pause';
@@ -744,6 +768,7 @@ function playBoth() {
     origAudio.removeEventListener('ended', onEnd);
     $('origPlayBtn').innerHTML = '<i class="ti ti-player-play" aria-hidden="true"></i> Play Example';
     setTimeout(()=>{
+      recAudio.pause();
       recAudio.currentTime = 0;
       recAudio.play();
       $('recPlayBtn').innerHTML = '<i class="ti ti-player-pause" aria-hidden="true"></i> Pause';
